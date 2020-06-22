@@ -220,13 +220,13 @@ class DRIVER_CONSTRAINT_OT_create(bpy.types.Operator):
                 if shape.relative_key != shape:
                     shapes.append((shape.name,shape.name,shape.name,'SHAPEKEY_DATA',i))
                     i+=1
-        shapes.append(("CREATE_NEW_SHAPE","create new shape","create new shape",'NEW',i))
+        #I don't know how this works, and I don't want to do the legwork right now, so I'm disabling it - Mr. Black
+        #shapes.append(("CREATE_NEW_SHAPE","create new shape","create new shape",'NEW',i))
 
 
         return shapes
 
     def search_for_prop(self,context):
-        wm = context.window_manager
         if hasattr(self,"property_type") and self.prop_data_path != "":
             if len(context.selected_objects) > 1:
                 obj = None
@@ -319,6 +319,7 @@ class DRIVER_CONSTRAINT_OT_create(bpy.types.Operator):
     prop_data_path: bpy.props.StringProperty(name="Property Data Path", default="",update=search_for_prop)
 
     shape_name: bpy.props.EnumProperty(items = get_shapes, name = "Shape", description="Select the shape you want to add a driver to.")
+
     get_limits_auto: bpy.props.BoolProperty(name = "Get Limits",default=True,description="This will set the limits based on the bone location/rotation/scale automatically.")
 
 
@@ -382,8 +383,12 @@ class DRIVER_CONSTRAINT_OT_create(bpy.types.Operator):
             row.prop(self,"set_driver_limit_constraint",text="")
 
             row = layout.row()
-            row.label(text="Property Data Path")
-            row.prop(self,"prop_data_path",text="")
+            if self.property_type == "SHAPEKEY_PROPERTY":
+                row.label(text="Shape")
+                row.prop(self, "shape_name", text="")
+            else:
+                row.label(text="Property Data Path")
+                row.prop(self,"prop_data_path",text="")
 
             row = layout.row()
             row.label(text="Transform Type")
@@ -620,10 +625,12 @@ class DRIVER_CONSTRAINT_OT_create(bpy.types.Operator):
                     elif prop_type in ["BONE_CONSTRAINT_PROPERTY"]:
                         string_elements = self.prop_data_path.split(".")
                         data_path = string_elements[len(string_elements)-1]
-
                         curve = data.driver_add(data_path)
                     elif prop_type in ["NODE_PROPERTY"]:
                         curve = data.driver_add("default_value")
+                    elif prop_type in ["SHAPEKEY_PROPERTY"]:
+                        data_path = f"key_blocks[\"{self.shape_name}\"].value"
+                        curve = data.driver_add(data_path)
                     else:
                         if "." in self.prop_data_path:
                             data, path = get_property_and_path(obj, self.prop_data_path)
