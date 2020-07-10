@@ -71,7 +71,7 @@ def get_property_and_path(obj, data_path):
                     return data[key], "value"
     return None, None
 
-def get_prop_object(self,context,prop_name,obj):
+def get_prop_object(self, context, prop_name, obj, cur_mode):
     wm = context.window_manager
     
     data = obj.data
@@ -103,7 +103,7 @@ def get_prop_object(self,context,prop_name,obj):
                 return socket, "NODE_PROPERTY"
 
     ### return if property is found in modifier
-    if len(obj.modifiers) > 0 and '"' in prop_name:
+    if len(obj.modifiers) > 0 and cur_mode == "MODIFIER_PROPERTY":
         modifier_name = prop_name.split('"')[1]
         if modifier_name in obj.modifiers:
             modifier = obj.modifiers[modifier_name]
@@ -111,16 +111,15 @@ def get_prop_object(self,context,prop_name,obj):
             
     
     ### return if property is found in shapekeys
-    if shape_keys != None and '"' in prop_name:
-        shape_name = prop_name.split('"')[1]
-        if shape_name in shape_keys.key_blocks:
-            return shape_keys, "SHAPEKEY_PROPERTY"
-    if hasattr(shape_keys,prop_name):
+    if shape_keys != None and cur_mode == "SHAPEKEY_PROPERTY":
+        # the one shapekey is chose elsewhere, move on
+        return shape_keys, "SHAPEKEY_PROPERTY"
+    if hasattr(shape_keys, prop_name):
         return shape_keys, "SHAPEKEY_PROPERTY"
     
     
     ### return if property is found in bone constraint
-    if '"' in prop_name:
+    if cur_mode == "BONE_CONSTRAINT_PROPERTY":
         if len(prop_name.split('"')) > 3:
             bone_name = prop_name.split('"')[1]
             const_name = prop_name.split('"')[3]
@@ -128,7 +127,7 @@ def get_prop_object(self,context,prop_name,obj):
                 return obj.pose.bones[bone_name].constraints[const_name], "BONE_CONSTRAINT_PROPERTY"
             
     ### return if property is found in bone
-    if obj.type == "ARMATURE" and '"' in prop_name and "bones" in prop_name:
+    if obj.type == "ARMATURE" and cur_mode == "BONE_PROPERTY":
         
         if len(prop_name.split('"')) >= 3:
             bone_name = prop_name.split('"')[1]
@@ -153,7 +152,7 @@ def get_prop_object(self,context,prop_name,obj):
     if hasattr(obj,prop_name):
         return obj, "OBJECT_PROPERTY"
     if "." in prop_name:
-        ob, data_path = get_property_and_path(obj, prop_name)
+        ob = get_property_and_path(obj, prop_name)[0]
         if ob != None:
             return ob, "OBJECT_PROPERTY"
 
@@ -172,7 +171,7 @@ def get_prop_object(self,context,prop_name,obj):
         return tex, "TEXTURE_PROPERTY"
     
     ### return if property is found in object constraint
-    if '"' in prop_name and "constraint" in prop_name:
+    if "constraint" in prop_name and cur_mode == "OBJECT_CONSTRAINT_PROPERTY":
         if len(prop_name.split('"')) == 3:
             const_name = prop_name.split('"')[1]
             if const_name in obj.constraints:
@@ -237,8 +236,9 @@ class DRIVER_CONSTRAINT_OT_create(bpy.types.Operator):
             else:
                 obj = context.selected_objects[0]
 
-            if get_prop_object(self,context,self.prop_data_path,obj) != None:
-                self.property_type = get_prop_object(self,context,self.prop_data_path,obj)[1]
+            curProps = get_prop_object(self,context,self.prop_data_path,obj, self.property_type)
+            if curProps != None:
+                self.property_type = curProps[1]
             else:
                 self.prop_data_path = ""
 
@@ -605,10 +605,11 @@ class DRIVER_CONSTRAINT_OT_create(bpy.types.Operator):
         for obj in context.selected_objects:
             if obj != context.view_layer.objects.active or len(context.selected_objects) == 1:
                 curve = None
-                prop_object = get_prop_object(self,context,self.prop_data_path,obj)
+                prop_object = get_prop_object(self,context, self.prop_data_path,obj, self.property_type)
+                self.report({'INFO'},f"adding curve {self.prop_data_path} on {obj.name} by way of {prop_object[1]}")
                 if prop_object != None:
-                    prop_type = get_prop_object(self,context,self.prop_data_path,obj)[1]
-                    data = get_prop_object(self,context,self.prop_data_path,obj)[0]
+                    prop_type = prop_object[1]
+                    data = prop_object[0]
                     if data == obj and self.property_type == "OBECT_DATA_PROPERTY":
                         data = data.data
                     if prop_type in ["MODIFIER_PROPERTY","OBJECT_CONSTRAINT_PROPERTY"]:
@@ -766,9 +767,10 @@ class DRIVER_CONSTRAINT_OT_create(bpy.types.Operator):
             obj = context.selected_objects[0]
 
         if wm.clipboard != "":
-            if get_prop_object(self,context,wm.clipboard,obj) != None:
+            prop_obj = get_prop_object(self, context, wm.clipboard,obj, self.property_type)
+            if prop_obj != None:
                 self.prop_data_path = wm.clipboard
-                self.property_type = get_prop_object(self,context,wm.clipboard,obj)[1]
+                self.property_type = prop_obj[1]
             else:
                 self.property_type = "OBJECT_PROPERTY"
 
